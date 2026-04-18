@@ -84,7 +84,7 @@ fun SearchScreen(
                         ) {
                             Icon(Icons.Default.SearchOff, null, modifier = Modifier.size(64.dp),
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                            Text("No results for \"$query\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("No results for "$query"", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     else -> {

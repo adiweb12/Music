@@ -1,6 +1,6 @@
 package com.auralyx.ui.library
 
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.aspectRatio
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.*

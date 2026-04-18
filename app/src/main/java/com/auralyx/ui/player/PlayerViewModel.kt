@@ -17,15 +17,17 @@ class PlayerViewModel @Inject constructor(
     private val prefs: PreferencesManager
 ) : ViewModel() {
 
-    val state           = player.state
+    val state            = player.state
     val defaultVideoMode = prefs.isDefaultVideoMode
 
-    fun togglePlayPause()          = player.togglePlayPause()
-    fun skipToNext()               = player.skipToNext()
-    fun skipToPrev()               = player.skipToPrev()
-    fun seekTo(ms: Long)           = player.seekTo(ms)
-    fun seekToFraction(f: Float)   = player.seekToFraction(f)
-    fun toggleShuffle()            = player.toggleShuffle()
+    // ── Transport controls ────────────────────────────────────────────────
+    fun togglePlayPause()        = player.togglePlayPause()
+    fun skipToNext()             = player.skipToNext()
+    fun skipToPrev()             = player.skipToPrev()
+    fun seekTo(ms: Long)         = player.seekTo(ms)
+    fun seekToFraction(f: Float) = player.seekToFraction(f)
+    fun toggleShuffle()          = player.toggleShuffle()
+
     fun cycleRepeatMode() {
         val next = when (player.state.value.repeatMode) {
             RepeatMode.OFF -> RepeatMode.ALL
@@ -35,11 +37,18 @@ class PlayerViewModel @Inject constructor(
         player.setRepeatMode(next)
     }
 
+    // ── Video toggle ──────────────────────────────────────────────────────
+    /** Flip between audio-only and video modes. */
     fun toggleVideo() {
-        val current = player.state.value.isVideoEnabled
-        player.setVideoEnabled(!current)
+        player.setVideoEnabled(!player.state.value.isVideoEnabled)
     }
 
+    /** Explicitly set video mode (e.g. from Settings default preference). */
+    fun setVideoEnabled(enabled: Boolean) {
+        player.setVideoEnabled(enabled)
+    }
+
+    // ── Analytics / last-played ───────────────────────────────────────────
     fun updateLastPlayed(id: Long) {
         viewModelScope.launch {
             repository.updateLastPlayed(id, System.currentTimeMillis())

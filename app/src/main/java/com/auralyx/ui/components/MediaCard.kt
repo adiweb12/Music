@@ -1,67 +1,83 @@
 package com.auralyx.ui.components
 
+import android.graphics.Bitmap
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.auralyx.domain.model.MediaItem
 import com.auralyx.ui.theme.PurpleAccent
+import com.auralyx.utils.ThumbnailUtils
+import kotlinx.coroutines.launch
 
+/** Horizontal card used in home-screen carousels. */
 @Composable
-fun MediaCard(
-    item: MediaItem,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun MediaCard(item: MediaItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val source  = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale   by animateFloatAsState(if (pressed) 0.94f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "s")
+
     Card(
-        modifier = modifier
-            .width(150.dp)
-            .clickable(onClick = onClick),
-        shape  = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        modifier  = modifier.width(160.dp).scale(scale)
+            .clickable(interactionSource = source, indication = null, onClick = onClick),
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(if (pressed) 2.dp else 8.dp)
     ) {
         Column {
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp)) {
-                AlbumArt(uri = item.albumArtUri, isVideo = item.isAD17, modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxWidth().height(160.dp)) {
                 if (item.isAD17) {
-                    Surface(
-                        modifier = Modifier.padding(6.dp).align(Alignment.TopEnd),
-                        color = PurpleAccent.copy(alpha = 0.9f),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Videocam,
-                            contentDescription = "Video",
-                            modifier = Modifier.padding(4.dp).size(14.dp),
-                            tint = Color.White
-                        )
+                    AD17ThumbnailImage(item.path, Modifier.fillMaxSize())
+                } else {
+                    AlbumArt(item.albumArtUri, isVideo = false, Modifier.fillMaxSize())
+                }
+                // gradient scrim
+                Box(Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(0f to Color.Transparent, 0.55f to Color.Transparent, 1f to Color.Black.copy(0.55f))
+                ))
+                // aD17 badge
+                if (item.isAD17) {
+                    Surface(Modifier.padding(7.dp).align(Alignment.TopEnd), color = PurpleAccent.copy(0.92f), shape = RoundedCornerShape(8.dp)) {
+                        Row(Modifier.padding(horizontal = 6.dp, vertical = 3.dp), Arrangement.spacedBy(3.dp), Alignment.CenterVertically) {
+                            Icon(Icons.Default.Videocam, null, tint = Color.White, modifier = Modifier.size(11.dp))
+                            Text("aD17", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                        }
                     }
                 }
+                Icon(Icons.Default.PlayCircleFilled, null, tint = Color.White.copy(0.85f),
+                    modifier = Modifier.size(30.dp).align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp))
             }
-            Column(modifier = Modifier.padding(10.dp)) {
-                Text(text = item.title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Text(item.title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(2.dp))
-                Text(text = item.displayArtist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.displayArtist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
 }
 
+/** List row used across Songs, Library, Search. */
 @Composable
 fun MediaListItem(
     item: MediaItem,
@@ -73,40 +89,25 @@ fun MediaListItem(
     ListItem(
         modifier = modifier.clickable(onClick = onClick),
         headlineContent = {
-            Text(
-                text     = item.title,
-                style    = MaterialTheme.typography.titleSmall,
-                color    = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Text(item.title, style = MaterialTheme.typography.titleSmall,
+                color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         supportingContent = {
-            Text(
-                text     = "${item.displayArtist} • ${item.durationFormatted}",
-                style    = MaterialTheme.typography.bodySmall,
-                color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Text("${item.displayArtist} \u2022 ${item.durationFormatted}", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         leadingContent = {
-            Box(modifier = Modifier.size(48.dp)) {
-                AlbumArt(
-                    uri      = item.albumArtUri,
-                    isVideo  = item.isAD17,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
-                )
+            Box(Modifier.size(50.dp)) {
+                if (item.isAD17) {
+                    AD17ThumbnailImage(item.path, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+                } else {
+                    AlbumArt(item.albumArtUri, false, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+                }
                 if (isPlaying) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        PlayingIndicator()
-                    }
+                    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(0.45f)),
+                        contentAlignment = Alignment.Center) { PlayingBars() }
                 }
             }
         },
@@ -114,65 +115,58 @@ fun MediaListItem(
     )
 }
 
+/** Loads a cached video frame bitmap for .aD17 files. */
+@Composable
+fun AD17ThumbnailImage(path: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var bmp     by remember(path) { mutableStateOf<Bitmap?>(null) }
+    val scope   = rememberCoroutineScope()
+
+    LaunchedEffect(path) {
+        scope.launch { bmp = ThumbnailUtils.getAD17Thumbnail(context, path) }
+    }
+
+    if (bmp != null) {
+        Image(bmp!!.asImageBitmap(), null, modifier = modifier, contentScale = ContentScale.Crop)
+    } else {
+        Box(modifier.background(Brush.linearGradient(listOf(Color(0xFF2D1B69), Color(0xFF11094E)))),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Videocam, null, tint = PurpleAccent.copy(0.6f), modifier = Modifier.size(28.dp))
+        }
+    }
+}
+
+/** Standard album art via Coil (content URI). */
 @Composable
 fun AlbumArt(uri: String?, isVideo: Boolean = false, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
-        if (uri != null) {
-            AsyncImage(
-                model = uri,
-                contentDescription = "Album Art",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+        if (!uri.isNullOrBlank()) {
+            AsyncImage(uri, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
+                Modifier.fillMaxSize().background(
+                    Brush.linearGradient(listOf(
+                        MaterialTheme.colorScheme.primary.copy(0.35f),
+                        MaterialTheme.colorScheme.tertiary.copy(0.18f)
+                    ))
+                ),
+                Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (isVideo) Icons.Default.Videocam else Icons.Default.MusicNote,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                    modifier = Modifier.size(32.dp)
-                )
+                Icon(if (isVideo) Icons.Default.Videocam else Icons.Default.MusicNote, null,
+                    tint = MaterialTheme.colorScheme.primary.copy(0.7f), modifier = Modifier.size(36.dp))
             }
         }
     }
 }
 
+/** Three animated equalizer bars shown on the currently-playing track. */
 @Composable
-fun PlayingIndicator(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.height(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        listOf(300, 380, 260).forEachIndexed { i, duration ->
-            val infiniteTransition = rememberInfiniteTransition(label = "bar$i")
-            val height by infiniteTransition.animateFloat(
-                initialValue  = 0.3f,
-                targetValue   = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation  = tween(duration),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "h$i"
-            )
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight(height)
-                    .background(Color.White, RoundedCornerShape(2.dp))
-            )
+fun PlayingBars(modifier: Modifier = Modifier) {
+    Row(modifier.height(18.dp), Arrangement.spacedBy(2.dp), Alignment.Bottom) {
+        listOf(300, 380, 260).forEachIndexed { i, dur ->
+            val inf = rememberInfiniteTransition(label = "b$i")
+            val h by inf.animateFloat(0.25f, 1f, infiniteRepeatable(tween(dur), RepeatMode.Reverse), label = "h$i")
+            Box(Modifier.width(3.dp).fillMaxHeight(h).background(Color.White, RoundedCornerShape(2.dp)))
         }
     }
 }

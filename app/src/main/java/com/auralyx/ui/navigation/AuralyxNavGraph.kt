@@ -1,6 +1,7 @@
 package com.auralyx.ui.navigation
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -21,26 +22,22 @@ import com.auralyx.ui.settings.SettingsScreen
 @Composable
 fun AuralyxNavGraph() {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val entry         by navController.currentBackStackEntryAsState()
+    val route         = entry?.destination?.route
 
-    val showBottomBar = currentRoute in NavDestination.bottomNavItems.map { it.route }
-    val showMiniPlayer = currentRoute != Routes.PLAYER && currentRoute != null
+    val isPlayerRoute  = route == Routes.PLAYER
+    val showBottomBar  = route in NavDestination.bottomNavItems.map { it.route }
+    val showMiniPlayer = !isPlayerRoute && route != null
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         bottomBar = {
             Column {
-                // Mini player sits above the bottom nav
                 if (showMiniPlayer) {
-                    MiniPlayerBar(
-                        onTap = { navController.navigate(Routes.PLAYER) }
-                    )
+                    MiniPlayerBar(onTap = { navController.navigate(Routes.PLAYER) })
                 }
                 if (showBottomBar) {
-                    AuralyxBottomNav(
-                        navController = navController,
-                        currentRoute  = currentRoute
-                    )
+                    AuralyxBottomNav(navController, route)
                 }
             }
         }
@@ -48,12 +45,12 @@ fun AuralyxNavGraph() {
         NavHost(
             navController    = navController,
             startDestination = NavDestination.Home.route,
-            modifier = Modifier.padding(padding)
+            modifier         = Modifier.padding(padding)
         ) {
             composable(
-                route = NavDestination.Home.route,
-                enterTransition = { fadeIn(tween(200)) },
-                exitTransition  = { fadeOut(tween(200)) }
+                NavDestination.Home.route,
+                enterTransition = { fadeIn(tween(220)) },
+                exitTransition  = { fadeOut(tween(180)) }
             ) {
                 HomeScreen(
                     onNavigateToPlayer   = { navController.navigate(Routes.PLAYER) },
@@ -62,40 +59,43 @@ fun AuralyxNavGraph() {
             }
 
             composable(
-                route = NavDestination.Library.route,
-                enterTransition = { fadeIn(tween(200)) },
-                exitTransition  = { fadeOut(tween(200)) }
+                NavDestination.Library.route,
+                enterTransition = { fadeIn(tween(220)) },
+                exitTransition  = { fadeOut(tween(180)) }
             ) {
-                LibraryScreen(
-                    onNavigateToPlayer = { navController.navigate(Routes.PLAYER) }
-                )
+                LibraryScreen(onNavigateToPlayer = { navController.navigate(Routes.PLAYER) })
             }
 
             composable(
-                route = NavDestination.Search.route,
-                enterTransition = { fadeIn(tween(200)) },
-                exitTransition  = { fadeOut(tween(200)) }
+                NavDestination.Search.route,
+                enterTransition = { fadeIn(tween(220)) },
+                exitTransition  = { fadeOut(tween(180)) }
             ) {
-                SearchScreen(
-                    onNavigateToPlayer = { navController.navigate(Routes.PLAYER) }
-                )
+                SearchScreen(onNavigateToPlayer = { navController.navigate(Routes.PLAYER) })
             }
 
             composable(
-                route = Routes.PLAYER,
+                Routes.PLAYER,
                 enterTransition = {
-                    slideInVertically(initialOffsetY = { it }, animationSpec = tween(350)) +
-                    fadeIn(tween(350))
+                    slideInVertically(tween(380, easing = FastOutSlowInEasing)) { it } +
+                    fadeIn(tween(280))
                 },
                 exitTransition = {
-                    slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300)) +
-                    fadeOut(tween(300))
+                    slideOutVertically(tween(300)) { it } + fadeOut(tween(260))
                 }
             ) {
                 PlayerScreen(onBack = { navController.popBackStack() })
             }
 
-            composable(Routes.SETTINGS) {
+            composable(
+                Routes.SETTINGS,
+                enterTransition = {
+                    slideInHorizontally(tween(280)) { it } + fadeIn(tween(220))
+                },
+                exitTransition = {
+                    slideOutHorizontally(tween(240)) { it } + fadeOut(tween(200))
+                }
+            ) {
                 SettingsScreen(onBack = { navController.popBackStack() })
             }
         }
@@ -103,16 +103,13 @@ fun AuralyxNavGraph() {
 }
 
 @Composable
-private fun AuralyxBottomNav(
-    navController: NavHostController,
-    currentRoute: String?
-) {
+private fun AuralyxBottomNav(navController: NavHostController, currentRoute: String?) {
     NavigationBar(tonalElevation = 0.dp) {
         NavDestination.bottomNavItems.forEach { dest ->
             val selected = currentRoute == dest.route
             NavigationBarItem(
                 selected = selected,
-                onClick  = {
+                onClick = {
                     navController.navigate(dest.route) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
@@ -121,12 +118,7 @@ private fun AuralyxBottomNav(
                         restoreState    = true
                     }
                 },
-                icon  = {
-                    Icon(
-                        imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
-                        contentDescription = dest.label
-                    )
-                },
+                icon  = { Icon(if (selected) dest.selectedIcon else dest.unselectedIcon, dest.label) },
                 label = { Text(dest.label) }
             )
         }
