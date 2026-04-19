@@ -13,11 +13,6 @@ import com.auralyx.player.AuralyxPlayer
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
-/**
- * Keeps ExoPlayer alive in background and shows a media notification
- * with album art, track title, and playback controls automatically.
- * User can control playback from the notification or lock screen.
- */
 @UnstableApi
 @AndroidEntryPoint
 class AuralyxPlaybackService : MediaSessionService() {
@@ -29,20 +24,25 @@ class AuralyxPlaybackService : MediaSessionService() {
         super.onCreate()
         createChannel()
         mediaSession = MediaSession.Builder(this, auralyxPlayer.exoPlayer).setId("auralyx").build()
-        setMediaNotificationProvider(
-            DefaultMediaNotificationProvider.Builder(this)
-                .setChannelId(CHANNEL_ID)
-                .setNotificationId(NOTIF_ID)
-                .build()
-                .also { it.setSmallIcon(R.drawable.ic_notification) }
-        )
+        
+        val provider = DefaultMediaNotificationProvider.Builder(this)
+            .setChannelId(CHANNEL_ID)
+            .setNotificationId(NOTIF_ID)
+            .build()
+            
+        // Using system icon until ic_notification is added to drawables
+        provider.setSmallIcon(android.R.drawable.ic_media_play)
+        setMediaNotificationProvider(provider)
     }
 
     override fun onGetSession(info: MediaSession.ControllerInfo) = mediaSession
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int { super.onStartCommand(intent,flags,startId); return START_STICKY }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        return START_STICKY
+    }
 
     override fun onTaskRemoved(root: Intent?) {
-        // Keep playing when user swipes app away — stop only if nothing queued
         val player = mediaSession?.player ?: run { stopSelf(); return }
         if (!player.playWhenReady || player.mediaItemCount == 0) stopSelf()
     }
@@ -55,11 +55,18 @@ class AuralyxPlaybackService : MediaSessionService() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(CHANNEL_ID, getString(R.string.channel_name), NotificationManager.IMPORTANCE_LOW)
-                .apply { description = getString(R.string.channel_description); setShowBadge(false); setSound(null,null) }
+            val ch = NotificationChannel(CHANNEL_ID, "Playback", NotificationManager.IMPORTANCE_LOW)
+                .apply { 
+                    description = "Auralyx Controls"
+                    setShowBadge(false)
+                }
             getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
         }
     }
 
-    companion object { private const val CHANNEL_ID = "auralyx_playback"; private const val NOTIF_ID = 1001 }
+    companion object { 
+        private const val CHANNEL_ID = "auralyx_playback"
+        private const val NOTIF_ID = 1001 
+    }
 }
+w
