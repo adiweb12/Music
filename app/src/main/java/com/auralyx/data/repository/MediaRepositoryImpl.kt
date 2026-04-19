@@ -1,5 +1,4 @@
 package com.auralyx.data.repository
-
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
@@ -7,10 +6,7 @@ import android.os.Build
 import android.provider.MediaStore
 import com.auralyx.data.local.dao.MediaDao
 import com.auralyx.data.local.entity.MediaEntity
-import com.auralyx.domain.model.Album
-import com.auralyx.domain.model.Artist
-import com.auralyx.domain.model.Folder
-import com.auralyx.domain.model.MediaItem
+import com.auralyx.domain.model.*
 import com.auralyx.domain.repository.MediaRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -24,202 +20,100 @@ import javax.inject.Singleton
 @Singleton
 class MediaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val mediaDao: MediaDao
+    private val dao: MediaDao
 ) : MediaRepository {
+    override fun getAllSongs()        = dao.getAllSongs().map { it.map { e -> e.toDomain() } }
+    override fun getAllMusicVideos()  = dao.getAllMusicVideos().map { it.map { e -> e.toDomain() } }
+    override fun getRecentlyPlayed() = dao.getRecentlyPlayed().map { it.map { e -> e.toDomain() } }
+    override fun searchAll(q:String) = dao.search(q).map { it.map { e -> e.toDomain() } }
+    override fun getSongsByAlbum(id:Long)   = dao.getSongsByAlbum(id.toString()).map { it.map { e->e.toDomain() } }
+    override fun getSongsByArtist(id:Long)  = dao.getSongsByArtist(id.toString()).map { it.map { e->e.toDomain() } }
+    override fun getSongsByFolder(id:Long)  = dao.getSongsByFolder(id).map { it.map { e->e.toDomain() } }
 
-    // ── Flows from DB ────────────────────────────────────────────────────
-
-    override fun getAllSongs() = mediaDao.getAllSongs().map { it.map { e -> e.toDomain() } }
-    override fun getAllMusicVideos() = mediaDao.getAllMusicVideos().map { it.map { e -> e.toDomain() } }
-    override fun getRecentlyPlayed() = mediaDao.getRecentlyPlayed().map { it.map { e -> e.toDomain() } }
-    override fun searchAll(query: String) = mediaDao.search(query).map { it.map { e -> e.toDomain() } }
-
-    override fun getSongsByAlbum(albumId: Long): Flow<List<MediaItem>> =
-        mediaDao.getSongsByAlbum(albumId.toString()).map { it.map { e -> e.toDomain() } }
-
-    override fun getSongsByArtist(artistId: Long): Flow<List<MediaItem>> =
-        mediaDao.getSongsByArtist(artistId.toString()).map { it.map { e -> e.toDomain() } }
-
-    override fun getSongsByFolder(folderId: Long): Flow<List<MediaItem>> =
-        mediaDao.getSongsByFolder(folderId).map { it.map { e -> e.toDomain() } }
-
-    // ── Albums / Artists / Folders are derived from songs ────────────────
-
-    override fun getAllAlbums(): Flow<List<Album>> =
-        mediaDao.getAllSongs().map { entities ->
-            entities.groupBy { it.album }.map { (albumName, songs) ->
-                val first = songs.first()
-                Album(
-                    id = albumName.hashCode().toLong(),
-                    name = albumName.ifBlank { "Unknown Album" },
-                    artist = first.artist.ifBlank { "Unknown Artist" },
-                    artUri = first.albumArtUri,
-                    songCount = songs.size
-                )
-            }.sortedBy { it.name }
-        }
-
-    override fun getAllArtists(): Flow<List<Artist>> =
-        mediaDao.getAllSongs().map { entities ->
-            entities.groupBy { it.artist }.map { (artistName, songs) ->
-                val albums = songs.map { it.album }.distinct().size
-                Artist(
-                    id = artistName.hashCode().toLong(),
-                    name = artistName.ifBlank { "Unknown Artist" },
-                    artUri = songs.firstOrNull()?.albumArtUri,
-                    albumCount = albums,
-                    songCount = songs.size
-                )
-            }.sortedBy { it.name }
-        }
-
-    override fun getAllFolders(): Flow<List<Folder>> =
-        mediaDao.getAllSongs().map { entities ->
-            entities.groupBy { it.folderId }.map { (folderId, songs) ->
-                Folder(
-                    id = folderId,
-                    name = songs.first().folderName.ifBlank { "Unknown" },
-                    path = File(songs.first().path).parent ?: "",
-                    songCount = songs.size
-                )
-            }.sortedBy { it.name }
-        }
-
-    // ── Storage scanning ─────────────────────────────────────────────────
+    override fun getAllAlbums(): Flow<List<Album>> = dao.getAllSongs().map { entities ->
+        entities.groupBy { it.album }.map { (name,songs) ->
+            Album(name.hashCode().toLong(), name.ifBlank{"Unknown Album"}, songs.first().artist.ifBlank{"Unknown Artist"}, songs.first().albumArtUri, songs.size)
+        }.sortedBy { it.name }
+    }
+    override fun getAllArtists(): Flow<List<Artist>> = dao.getAllSongs().map { entities ->
+        entities.groupBy { it.artist }.map { (name,songs) ->
+            Artist(name.hashCode().toLong(), name.ifBlank{"Unknown Artist"}, songs.first().albumArtUri, songs.map{it.album}.distinct().size, songs.size)
+        }.sortedBy { it.name }
+    }
+    override fun getAllFolders(): Flow<List<Folder>> = dao.getAllSongs().map { entities ->
+        entities.groupBy { it.folderId }.map { (fid,songs) ->
+            Folder(fid, songs.first().folderName.ifBlank{"Unknown"}, File(songs.first().path).parent?:"", songs.size)
+        }.sortedBy { it.name }
+    }
 
     override suspend fun scanStorage() = withContext(Dispatchers.IO) {
         val items = mutableListOf<MediaEntity>()
-
-        // Scan standard audio via MediaStore
         items += scanAudio()
-
-        // Scan .aD17 files from external storage recursively
-        items += scanAD17Files()
-
-        mediaDao.deleteAll()
-        mediaDao.insertAll(items)
+        items += scanAD17()
+        dao.deleteAll()
+        dao.insertAll(items)
     }
 
     private fun scanAudio(): List<MediaEntity> {
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.BUCKET_ID,
-            MediaStore.Audio.Media.BUCKET_DISPLAY_NAME,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.TRACK
-        )
-
-        val items = mutableListOf<MediaEntity>()
+        val proj = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.BUCKET_ID, MediaStore.Audio.Media.BUCKET_DISPLAY_NAME,
+            MediaStore.Audio.Media.DATE_ADDED, MediaStore.Audio.Media.SIZE, MediaStore.Audio.Media.TRACK)
         val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         else MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-
-        context.contentResolver.query(
-            uri, projection,
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} > 5000",
-            null,
-            "${MediaStore.Audio.Media.TITLE} ASC"
-        )?.use { cursor ->
-            val idCol      = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol   = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistCol  = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val albumCol   = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val durCol     = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val dataCol    = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            val albIdCol   = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            val bucketCol  = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.BUCKET_ID)
-            val bucketNCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
-            val dateCol    = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-            val sizeCol    = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
-            val trackCol   = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
-
-            while (cursor.moveToNext()) {
-                val albumId = cursor.getLong(albIdCol)
-                val artUri = ContentUris.withAppendedId(
-                    Uri.parse("content://media/external/audio/albumart"), albumId
-                ).toString()
-
+        val items = mutableListOf<MediaEntity>()
+        context.contentResolver.query(uri, proj, "${MediaStore.Audio.Media.IS_MUSIC}!=0 AND ${MediaStore.Audio.Media.DURATION}>5000", null, "${MediaStore.Audio.Media.TITLE} ASC")?.use { c ->
+            while (c.moveToNext()) {
+                val albumId = c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID))
+                val artUri  = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId).toString()
+                val path    = c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)) ?: continue
                 items += MediaEntity(
-                    title      = cursor.getString(titleCol) ?: "Unknown",
-                    artist     = cursor.getString(artistCol) ?: "",
-                    album      = cursor.getString(albumCol) ?: "",
-                    duration   = cursor.getLong(durCol),
-                    path       = cursor.getString(dataCol) ?: continue,
-                    albumArtUri = artUri,
-                    isAD17     = false,
-                    folderId   = cursor.getLong(bucketCol),
-                    folderName = cursor.getString(bucketNCol) ?: "",
-                    dateAdded  = cursor.getLong(dateCol),
-                    size       = cursor.getLong(sizeCol),
-                    trackNumber = cursor.getInt(trackCol)
+                    title=c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE))?:"Unknown",
+                    artist=c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST))?:"",
+                    album=c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM))?:"",
+                    duration=c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)),
+                    path=path, albumArtUri=artUri, isAD17=false,
+                    folderId=c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.BUCKET_ID)),
+                    folderName=c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.BUCKET_DISPLAY_NAME))?:"",
+                    dateAdded=c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)),
+                    size=c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)),
+                    trackNumber=c.getInt(c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK))
                 )
             }
         }
         return items
     }
 
-    /** Recursively scan external storage for .aD17 files */
-    private fun scanAD17Files(): List<MediaEntity> {
+    private fun scanAD17(): List<MediaEntity> {
         val items = mutableListOf<MediaEntity>()
-        val externalDirs = context.getExternalFilesDirs(null)
-            .mapNotNull { it?.parentFile?.parentFile?.parentFile?.parentFile } // /sdcard
-
-        // Also include standard Music/Downloads directories
-        val roots = externalDirs.toMutableList()
+        val roots = mutableListOf<File>()
         android.os.Environment.getExternalStorageDirectory()?.let { roots += it }
-
-        for (root in roots.distinct()) {
-            if (root.exists()) scanDir(root, items)
-        }
+        context.getExternalFilesDirs(null).mapNotNull { it?.parentFile?.parentFile?.parentFile?.parentFile }.forEach { roots += it }
+        roots.distinct().filter { it.exists() }.forEach { scanDir(it, items) }
         return items
     }
 
-    private fun scanDir(dir: File, accumulator: MutableList<MediaEntity>) {
+    private fun scanDir(dir: File, acc: MutableList<MediaEntity>) {
         if (!dir.canRead()) return
-        dir.listFiles()?.forEach { file ->
+        dir.listFiles()?.forEach { f ->
             when {
-                file.isDirectory -> scanDir(file, accumulator)
-                file.extension.lowercase() == "ad17" -> {
-                    accumulator += MediaEntity(
-                        title      = file.nameWithoutExtension,
-                        artist     = "",
-                        album      = "",
-                        duration   = extractDuration(file.absolutePath),
-                        path       = file.absolutePath,
-                        albumArtUri = null,
-                        isAD17     = true,
-                        folderId   = file.parent.hashCode().toLong(),
-                        folderName = file.parentFile?.name ?: "",
-                        dateAdded  = file.lastModified(),
-                        size       = file.length()
-                    )
+                f.isDirectory -> scanDir(f, acc)
+                f.extension.lowercase() == "ad17" -> {
+                    val dur = try {
+                        val r = android.media.MediaMetadataRetriever(); r.setDataSource(f.absolutePath)
+                        val d = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?:0L
+                        r.release(); d
+                    } catch(_:Exception){ 0L }
+                    acc += MediaEntity(title=f.nameWithoutExtension, artist="", album="", duration=dur,
+                        path=f.absolutePath, albumArtUri=null, isAD17=true,
+                        folderId=f.parent.hashCode().toLong(), folderName=f.parentFile?.name?:"",
+                        dateAdded=f.lastModified(), size=f.length())
                 }
             }
         }
     }
 
-    private fun extractDuration(path: String): Long {
-        return try {
-            val retriever = android.media.MediaMetadataRetriever()
-            retriever.setDataSource(path)
-            val dur = retriever.extractMetadata(
-                android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
-            )?.toLongOrNull() ?: 0L
-            retriever.release()
-            dur
-        } catch (e: Exception) { 0L }
-    }
-
-    override suspend fun updateLastPlayed(id: Long, timestamp: Long) {
-        mediaDao.updateLastPlayed(id, timestamp)
-    }
-
-    override suspend fun getSongCount() = mediaDao.getSongCount()
+    override suspend fun updateLastPlayed(id:Long, timestamp:Long) = dao.updateLastPlayed(id,timestamp)
+    override suspend fun getSongCount() = dao.getSongCount()
 }

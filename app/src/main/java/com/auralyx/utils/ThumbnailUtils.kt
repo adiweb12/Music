@@ -10,88 +10,67 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Handles .aD17 file operations:
- *  - resolveAD17Path  : symlink/copy .aD17 → temp .mp4 so ExoPlayer can play it
- *  - getAD17Thumbnail : extract a video frame and cache as PNG on disk
- *  - getVideoThumbnail: generic frame extraction from any video path
+ * aD17 thumbnail extraction with persistent disk cache.
+ * Cache key = filename + lastModified so re-extraction only happens when file changes.
  */
 object ThumbnailUtils {
 
     private const val THUMB_DIR  = "ad17_thumbs"
     private const val THUMB_SIZE = 512
 
-    /**
-     * Returns a cached Bitmap for an .aD17 (or any video) file.
-     * Reads from a disk cache keyed on filename + lastModified,
-     * so extraction only happens once per file.
-     */
-    suspend fun getAD17Thumbnail(context: Context, originalPath: String): Bitmap? =
+    /** Returns a Bitmap for an .aD17 file. Checks disk cache first. */
+    suspend fun getAD17Thumbnail(context: Context, path: String): Bitmap? =
         withContext(Dispatchers.IO) {
-            val src = File(originalPath)
+            val src = File(path)
             if (!src.exists()) return@withContext null
 
-            val cacheKey = "${src.nameWithoutExtension}_${src.lastModified()}.png"
-            val thumbDir = File(context.cacheDir, THUMB_DIR).also { it.mkdirs() }
+            val cacheKey  = "${src.nameWithoutExtension}_${src.lastModified()}.png"
+            val thumbDir  = File(context.cacheDir, THUMB_DIR).also { it.mkdirs() }
             val cacheFile = File(thumbDir, cacheKey)
 
-            // Return from disk cache if available
+            // Return cached version if available
             if (cacheFile.exists()) {
-                return@withContext BitmapFactory.decodeFile(cacheFile.absolutePath)
+                return@withContext try { BitmapFactory.decodeFile(cacheFile.absolutePath) } catch (_: Exception) { null }
             }
 
-            // Extract the first non-black frame
-            val bmp = extractFrame(originalPath) ?: return@withContext null
+            // Extract frame from video
+            val raw = extractFrame(path) ?: return@withContext null
 
-            // Scale down to keep memory sane
+            // Scale to manageable size
             val scaled = Bitmap.createScaledBitmap(
-                bmp,
+                raw,
                 THUMB_SIZE,
-                (THUMB_SIZE * bmp.height / bmp.width.toFloat()).toInt(),
+                (THUMB_SIZE * raw.height.toFloat() / raw.width).toInt().coerceAtLeast(1),
                 true
             )
-            bmp.recycle()
+            if (raw !== scaled) raw.recycle()
 
-            // Persist to disk cache
-            try {
-                FileOutputStream(cacheFile).use { out ->
-                    scaled.compress(Bitmap.CompressFormat.PNG, 90, out)
-                }
-            } catch (_: Exception) {}
+            // Save to disk cache
+            try { FileOutputStream(cacheFile).use { scaled.compress(Bitmap.CompressFormat.PNG, 85, it) } } catch (_: Exception) {}
 
             scaled
         }
 
-    /** Raw frame extraction — tries 1 s, then 0 s as fallback. */
     private fun extractFrame(path: String): Bitmap? {
-        val retriever = MediaMetadataRetriever()
+        val r = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(path)
-            retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-        } catch (_: Exception) {
-            null
-        } finally {
-            try { retriever.release() } catch (_: Exception) {}
-        }
+            r.setDataSource(path)
+            r.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: r.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } catch (_: Exception) { null }
+        finally { try { r.release() } catch (_: Exception) {} }
     }
 
-    /** Legacy helper kept for compatibility. Delegates to getAD17Thumbnail. */
-    suspend fun getVideoThumbnail(context: Context, path: String): Bitmap? =
-        getAD17Thumbnail(context, path)
-
     /**
-     * Copies .aD17 → temp .mp4 in cache so ExoPlayer plays it natively.
-     * Re-uses existing copy when source hasn't changed (mtime check).
+     * Copies .aD17 to a temp .mp4 in cache so ExoPlayer can play it natively.
+     * Reuses existing copy unless source has changed.
      */
-    suspend fun resolveAD17Path(context: Context, originalPath: String): String =
+    suspend fun resolveAD17Path(context: Context, path: String): String =
         withContext(Dispatchers.IO) {
-            val src = File(originalPath)
-            if (!src.exists()) return@withContext originalPath
-
-            val dest = File(context.cacheDir, "ad17_${src.nameWithoutExtension}.mp4")
-            if (dest.exists() && dest.lastModified() >= src.lastModified()) {
-                return@withContext dest.absolutePath
-            }
+            val src  = File(path)
+            if (!src.exists()) return@withContext path
+            val dest = File(context.cacheDir, "play_${src.nameWithoutExtension}.mp4")
+            if (dest.exists() && dest.lastModified() >= src.lastModified()) return@withContext dest.absolutePath
             src.copyTo(dest, overwrite = true)
             dest.absolutePath
         }

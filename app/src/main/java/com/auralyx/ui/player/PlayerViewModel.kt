@@ -20,7 +20,6 @@ class PlayerViewModel @Inject constructor(
     val state            = player.state
     val defaultVideoMode = prefs.isDefaultVideoMode
 
-    // ── Transport controls ────────────────────────────────────────────────
     fun togglePlayPause()        = player.togglePlayPause()
     fun skipToNext()             = player.skipToNext()
     fun skipToPrev()             = player.skipToPrev()
@@ -37,21 +36,9 @@ class PlayerViewModel @Inject constructor(
         player.setRepeatMode(next)
     }
 
-    // ── Video toggle ──────────────────────────────────────────────────────
-    /** Flip between audio-only and video modes. */
-    fun toggleVideo() {
-        player.setVideoEnabled(!player.state.value.isVideoEnabled)
-    }
+    fun toggleVideo() = player.setVideoEnabled(!player.state.value.isVideoEnabled)
 
-    /** Explicitly set video mode (e.g. from Settings default preference). */
-    fun setVideoEnabled(enabled: Boolean) {
-        player.setVideoEnabled(enabled)
-    }
-
-    // ── Analytics / last-played ───────────────────────────────────────────
     fun updateLastPlayed(id: Long) {
-        viewModelScope.launch {
-            repository.updateLastPlayed(id, System.currentTimeMillis())
-        }
+        viewModelScope.launch { repository.updateLastPlayed(id, System.currentTimeMillis()) }
     }
 }

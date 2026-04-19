@@ -1,11 +1,6 @@
 package com.auralyx.domain.repository
-
-import com.auralyx.domain.model.Album
-import com.auralyx.domain.model.Artist
-import com.auralyx.domain.model.Folder
-import com.auralyx.domain.model.MediaItem
+import com.auralyx.domain.model.*
 import kotlinx.coroutines.flow.Flow
-
 interface MediaRepository {
     fun getAllSongs(): Flow<List<MediaItem>>
     fun getAllMusicVideos(): Flow<List<MediaItem>>

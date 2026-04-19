@@ -1,5 +1,4 @@
 package com.auralyx
-
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -20,41 +19,20 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     @Inject lateinit var prefs: PreferencesManager
 
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* permissions handled in Compose via state */ }
+    private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Full edge-to-edge — content draws behind system bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        // Request storage permissions immediately on first launch
-        permissionLauncher.launch(PermissionUtils.getRequiredPermissions())
-
-        // Start playback service early so it's ready when user taps play
-        startServiceCompat()
-
+        permLauncher.launch(PermissionUtils.getRequiredPermissions())
+        try { startService(Intent(this, AuralyxPlaybackService::class.java)) } catch (_: Exception) {}
         setContent {
             val isDark by prefs.isDarkTheme.collectAsState(initial = true)
             AuralyxTheme(darkTheme = isDark) {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    AuralyxNavGraph()
-                }
+                Surface(modifier = Modifier.fillMaxSize()) { AuralyxNavGraph() }
             }
-        }
-    }
-
-    private fun startServiceCompat() {
-        try {
-            val intent = Intent(this, AuralyxPlaybackService::class.java)
-            startService(intent)
-        } catch (e: Exception) {
-            // Service will start on first play anyway
         }
     }
 }
