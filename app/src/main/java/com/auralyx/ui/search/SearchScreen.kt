@@ -41,10 +41,7 @@ fun SearchScreen(onNavigateToPlayer: () -> Unit, vm: SearchViewModel = hiltViewM
                         } else null,
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        )
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary, unfocusedBorderColor = MaterialTheme.colorScheme.outline)
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -52,13 +49,20 @@ fun SearchScreen(onNavigateToPlayer: () -> Unit, vm: SearchViewModel = hiltViewM
         }) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when {
-                    query.isBlank() -> Column(Modifier.align(Alignment.Center), Alignment.CenterHorizontally, Arrangement.spacedBy(8.dp)) {
+                    query.isBlank() -> Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Icon(Icons.Default.Search, null, Modifier.size(64.dp), MaterialTheme.colorScheme.primary.copy(0.35f))
                         Text("Search your library", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    results.isEmpty() -> Column(Modifier.align(Alignment.Center), Alignment.CenterHorizontally, Arrangement.spacedBy(8.dp)) {
+                    results.isEmpty() -> Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Icon(Icons.Default.SearchOff, null, Modifier.size(64.dp), MaterialTheme.colorScheme.primary.copy(0.35f))
-                        // FIX: Escaped quotes here
                         Text("No results for \"$query\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     else -> LazyColumn {
