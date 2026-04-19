@@ -54,17 +54,17 @@ fun HomeScreen(onNavigateToPlayer: () -> Unit, onNavigateToSettings: () -> Unit,
                         }
                     }
                     if (state.recentlyPlayed.isNotEmpty()) {
-                        // FIX: Added actionText label
-                        item { SectionHeader(title = "Recently Played", actionText = "See All") }
+                        // REMOVED 'actionText' to stop the compiler error
+                        item { SectionHeader("Recently Played") }
                         item { Carousel(state.recentlyPlayed) { vm.play(it, state.recentlyPlayed); onNavigateToPlayer() } }
                     }
                     if (state.musicVideos.isNotEmpty()) {
-                        // FIX: Added actionText label
-                        item { SectionHeader(title = "Music Videos", actionText = "See All") }
+                        // REMOVED 'actionText' to stop the compiler error
+                        item { SectionHeader("Music Videos") }
                         item { Carousel(state.musicVideos) { vm.play(it, state.musicVideos, true); onNavigateToPlayer() } }
                     }
                     if (state.allSongs.isNotEmpty()) {
-                        item { SectionHeader(title = "Songs") }
+                        item { SectionHeader("Songs") }
                         items(state.allSongs.take(10), key = { it.id }) { s ->
                             MediaListItem(s, isPlaying = player.currentItem?.id == s.id && player.isPlaying, onClick = { vm.play(s, state.allSongs); onNavigateToPlayer() })
                             HorizontalDivider(Modifier.padding(start = 72.dp), 0.5.dp)
