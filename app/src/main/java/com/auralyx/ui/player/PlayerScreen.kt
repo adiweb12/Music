@@ -44,16 +44,12 @@ import com.auralyx.ui.components.AlbumArt
 import com.auralyx.ui.theme.PurpleAccent
 import kotlinx.coroutines.delay
 
-// ════════════════════════════════════════════════════════════════════════
-// ENTRY POINT
-// ════════════════════════════════════════════════════════════════════════
 @Composable
 fun PlayerScreen(onBack: () -> Unit, vm: PlayerViewModel = hiltViewModel()) {
-    val state   by vm.state.collectAsState()
+    val state by vm.state.collectAsState()
     val context = LocalContext.current
     val activity = context as? Activity
 
-    // Keep screen ON while video is actively playing
     DisposableEffect(state.isVideoEnabled && state.isPlaying) {
         if (state.isVideoEnabled && state.isPlaying) {
             activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -63,7 +59,6 @@ fun PlayerScreen(onBack: () -> Unit, vm: PlayerViewModel = hiltViewModel()) {
         }
     }
 
-    // Track last played
     LaunchedEffect(state.currentItem?.id) {
         state.currentItem?.id?.let { vm.updateLastPlayed(it) }
     }
@@ -77,9 +72,6 @@ fun PlayerScreen(onBack: () -> Unit, vm: PlayerViewModel = hiltViewModel()) {
     }
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// VIDEO LAYOUT  — full-screen video + tap-to-reveal overlay controls
-// ════════════════════════════════════════════════════════════════════════
 @Composable
 private fun VideoLayout(
     state: com.auralyx.domain.model.PlayerState,
@@ -90,7 +82,6 @@ private fun VideoLayout(
     var showControls by remember { mutableStateOf(true) }
     var isFullscreen by remember { mutableStateOf(false) }
 
-    // Auto-hide controls after 3 s when playing
     LaunchedEffect(showControls, state.isPlaying) {
         if (showControls && state.isPlaying) {
             delay(3_000)
@@ -98,7 +89,6 @@ private fun VideoLayout(
         }
     }
 
-    // Lock orientation when fullscreen
     DisposableEffect(isFullscreen) {
         activity?.requestedOrientation = if (isFullscreen)
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -113,38 +103,35 @@ private fun VideoLayout(
             .background(Color.Black)
             .pointerInput(Unit) { detectTapGestures { showControls = !showControls } }
     ) {
-        // ── ExoPlayer surface — always visible, never fades ───────────────
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    player        = vm.player.exoPlayer
+                    player = vm.player.exoPlayer
                     useController = false
-                    resizeMode    = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            update   = { it.player = vm.player.exoPlayer }
+            update = { it.player = vm.player.exoPlayer }
         )
 
-        // ── Controls overlay — tap to show/hide ───────────────────────────
         AnimatedVisibility(
-            visible      = showControls,
-            enter        = fadeIn(tween(200)),
-            exit         = fadeOut(tween(200))
+            visible = showControls,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(200))
         ) {
             VideoOverlay(
-                state           = state,
-                vm              = vm,
-                isFullscreen    = isFullscreen,
-                onBack          = onBack,
-                onToggleFS      = { isFullscreen = !isFullscreen }
+                state = state,
+                vm = vm,
+                isFullscreen = isFullscreen,
+                onBack = onBack,
+                onToggleFS = { isFullscreen = !isFullscreen }
             )
         }
     }
 }
 
-// ── Overlay: top-bar + center transport + bottom seekbar ─────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VideoOverlay(
@@ -166,7 +153,6 @@ private fun VideoOverlay(
                 )
             )
     ) {
-        // ── TOP BAR ───────────────────────────────────────────────────────
         Row(
             Modifier
                 .fillMaxWidth()
@@ -200,23 +186,21 @@ private fun VideoOverlay(
             }
         }
 
-        // ── CENTER TRANSPORT ──────────────────────────────────────────────
         Row(
             Modifier.align(Alignment.Center),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
-            verticalAlignment     = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // -10s
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(Modifier.size(48.dp), onClick = { vm.seekTo((state.progress - 10_000).coerceAtLeast(0)) }) {
-                    Icon(Icons.Rounded.Replay10, null, tint = Color.White, modifier = Modifier.size(32.dp))
-                }
+            // Fix: Explicitly named parameters for the -10s button
+            IconButton(onClick = { vm.seekTo((state.progress - 10_000).coerceAtLeast(0)) }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Replay10, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
-            // Prev
-            IconButton(Modifier.size(52.dp), onClick = { vm.skipToPrev() }) {
+            
+            // Fix: Explicitly named parameters for the Prev button
+            IconButton(onClick = { vm.skipToPrev() }, modifier = Modifier.size(52.dp)) {
                 Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(36.dp))
             }
-            // Play/Pause — large circle
+
             Box(
                 Modifier.size(74.dp).clip(CircleShape).background(Color.White.copy(0.18f)).clickable { vm.togglePlayPause() },
                 Alignment.Center
@@ -228,19 +212,18 @@ private fun VideoOverlay(
                         Icon(if (p) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(40.dp))
                 }
             }
-            // Next
-            IconButton(Modifier.size(52.dp), onClick = { vm.skipToNext() }) {
+
+            // Fix: Explicitly named parameters for the Next button
+            IconButton(onClick = { vm.skipToNext() }, modifier = Modifier.size(52.dp)) {
                 Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(36.dp))
             }
-            // +10s
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(Modifier.size(48.dp), onClick = { vm.seekTo((state.progress + 10_000).coerceAtMost(state.duration)) }) {
-                    Icon(Icons.Rounded.Forward10, null, tint = Color.White, modifier = Modifier.size(32.dp))
-                }
+
+            // Fix: Explicitly named parameters for the +10s button
+            IconButton(onClick = { vm.seekTo((state.progress + 10_000).coerceAtMost(state.duration)) }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Forward10, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
         }
 
-        // ── BOTTOM — time + seekbar + extras ─────────────────────────────
         Column(
             Modifier
                 .fillMaxWidth()
@@ -253,9 +236,9 @@ private fun VideoOverlay(
                 Text(state.currentItem?.durationFormatted ?: "--:--", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.85f))
             }
             Slider(
-                value         = state.progressFraction,
+                value = state.progressFraction,
                 onValueChange = { vm.seekToFraction(it) },
-                colors        = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = PurpleAccent, inactiveTrackColor = Color.White.copy(0.3f))
+                colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = PurpleAccent, inactiveTrackColor = Color.White.copy(0.3f))
             )
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 IconButton(onClick = { vm.toggleShuffle() }) {
@@ -270,10 +253,6 @@ private fun VideoOverlay(
     }
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// AUDIO LAYOUT — album art FADES ONLY when user scrolls up to Up Next
-//               artwork stays fixed, only opacity changes with scroll
-// ════════════════════════════════════════════════════════════════════════
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AudioLayout(
@@ -283,11 +262,9 @@ private fun AudioLayout(
 ) {
     val scrollState = rememberLazyListState()
 
-    // Compute art alpha from scroll offset of the list
-    // Art starts fading after 60px scroll, fully gone by 300px
     val rawAlpha by remember {
         derivedStateOf {
-            val first  = scrollState.layoutInfo.visibleItemsInfo.firstOrNull() ?: return@derivedStateOf 1f
+            val first = scrollState.layoutInfo.visibleItemsInfo.firstOrNull() ?: return@derivedStateOf 1f
             val offset = -first.offset.toFloat()
             ((1f - (offset - 60f) / 240f)).coerceIn(0f, 1f)
         }
@@ -295,23 +272,21 @@ private fun AudioLayout(
     val artAlpha by animateFloatAsState(rawAlpha, tween(80), label = "artAlpha")
 
     Box(Modifier.fillMaxSize()) {
-        // ── Blurred background from album art / aD17 thumbnail ────────────
         val artUri = state.currentItem?.albumArtUri
         if (!artUri.isNullOrBlank()) {
             AsyncImage(
-                model            = artUri,
+                model = artUri,
                 contentDescription = null,
-                modifier         = Modifier.fillMaxSize().blur(72.dp).alpha(0.30f),
-                contentScale     = ContentScale.Crop
+                modifier = Modifier.fillMaxSize().blur(72.dp).alpha(0.30f),
+                contentScale = ContentScale.Crop
             )
         } else if (state.currentItem?.isAD17 == true) {
             AD17ThumbnailImage(
-                path     = state.currentItem!!.path,
+                path = state.currentItem!!.path,
                 modifier = Modifier.fillMaxSize().blur(72.dp).alpha(0.30f)
             )
         }
 
-        // Gradient overlay
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(listOf(
@@ -323,7 +298,6 @@ private fun AudioLayout(
         )
 
         Column(Modifier.fillMaxSize()) {
-            // ── TOP BAR ───────────────────────────────────────────────────
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -337,7 +311,6 @@ private fun AudioLayout(
                     }
                 },
                 actions = {
-                    // Show video toggle only for aD17 files
                     if (state.currentItem?.isAD17 == true) {
                         IconButton(onClick = { vm.toggleVideo() }) {
                             Icon(Icons.Default.Videocam, "Watch video", tint = MaterialTheme.colorScheme.primary)
@@ -349,27 +322,25 @@ private fun AudioLayout(
             )
 
             LazyColumn(
-                state          = scrollState,
-                modifier       = Modifier.fillMaxSize(),
+                state = scrollState,
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 48.dp)
             ) {
-                // ── 1. ALBUM ART — fades as user scrolls toward queue ─────
                 item {
                     Box(
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 28.dp, vertical = 4.dp)
-                            .alpha(artAlpha),   // <-- ONLY the art fades
+                            .alpha(artAlpha),
                         Alignment.Center
                     ) {
-                        // Subtle glow behind art
                         Box(
                             Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(26.dp))
                                 .background(Brush.radialGradient(listOf(MaterialTheme.colorScheme.primary.copy(0.20f), Color.Transparent)))
                         )
                         Card(
                             Modifier.fillMaxWidth().aspectRatio(1f),
-                            shape     = RoundedCornerShape(24.dp),
+                            shape = RoundedCornerShape(24.dp),
                             elevation = CardDefaults.cardElevation(32.dp)
                         ) {
                             if (state.currentItem?.isAD17 == true) {
@@ -381,7 +352,6 @@ private fun AudioLayout(
                     }
                 }
 
-                // ── 2. TRACK INFO ─────────────────────────────────────────
                 item {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 10.dp),
@@ -413,15 +383,14 @@ private fun AudioLayout(
                     }
                 }
 
-                // ── 3. SEEKBAR ────────────────────────────────────────────
                 item {
                     Column(Modifier.padding(horizontal = 24.dp)) {
                         Slider(
-                            value         = state.progressFraction,
+                            value = state.progressFraction,
                             onValueChange = { vm.seekToFraction(it) },
-                            colors        = SliderDefaults.colors(
-                                thumbColor         = MaterialTheme.colorScheme.primary,
-                                activeTrackColor   = MaterialTheme.colorScheme.primary,
+                            colors = SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary,
                                 inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(0.15f)
                             )
                         )
@@ -432,10 +401,8 @@ private fun AudioLayout(
                     }
                 }
 
-                // ── 4. TRANSPORT CONTROLS ─────────────────────────────────
                 item { AudioControls(state, vm) }
 
-                // ── 5. VOLUME ROW ─────────────────────────────────────────
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.VolumeDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
@@ -448,7 +415,6 @@ private fun AudioLayout(
                     }
                 }
 
-                // ── 6. UP NEXT HEADER ─────────────────────────────────────
                 item {
                     Spacer(Modifier.height(8.dp))
                     HorizontalDivider(Modifier.padding(horizontal = 28.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(0.4f))
@@ -459,7 +425,6 @@ private fun AudioLayout(
                     }
                 }
 
-                // ── 7. QUEUE ITEMS ────────────────────────────────────────
                 val upNext = state.queue.drop(state.queueIndex + 1)
                 if (upNext.isEmpty()) {
                     item {
@@ -477,7 +442,6 @@ private fun AudioLayout(
     }
 }
 
-// ─── Audio transport controls row ────────────────────────────────────────────
 @Composable
 private fun AudioControls(state: com.auralyx.domain.model.PlayerState, vm: PlayerViewModel) {
     val playScale by animateFloatAsState(if (state.isPlaying) 1f else 0.90f, spring(Spring.DampingRatioMediumBouncy), label = "ps")
@@ -486,12 +450,9 @@ private fun AudioControls(state: com.auralyx.domain.model.PlayerState, vm: Playe
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         Arrangement.SpaceEvenly, Alignment.CenterVertically
     ) {
-        // Shuffle
         CtrlBtn(Icons.Default.Shuffle, 44.dp, 22.dp, active = state.shuffleEnabled) { vm.toggleShuffle() }
-        // Prev
         CtrlBtn(Icons.Default.SkipPrevious, 56.dp, 34.dp) { vm.skipToPrev() }
 
-        // Play/Pause — gradient filled circle
         Box(
             Modifier.size(72.dp).scale(playScale).clip(CircleShape)
                 .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)))
@@ -506,9 +467,7 @@ private fun AudioControls(state: com.auralyx.domain.model.PlayerState, vm: Playe
             }
         }
 
-        // Next
         CtrlBtn(Icons.Default.SkipNext, 56.dp, 34.dp) { vm.skipToNext() }
-        // Repeat
         CtrlBtn(if (state.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, 44.dp, 22.dp, active = state.repeatMode != RepeatMode.OFF) { vm.cycleRepeatMode() }
     }
 }
@@ -524,7 +483,6 @@ private fun CtrlBtn(
     }
 }
 
-// ─── Queue row ────────────────────────────────────────────────────────────────
 @Composable
 private fun QueueRow(item: MediaItem, pos: Int) {
     ListItem(
